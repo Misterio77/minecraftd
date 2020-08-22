@@ -2,10 +2,13 @@
 
 # The actual program name
 declare -r myname="minecraftd"
+# The game name
 declare -r game="minecraft"
-
 # The subserver name, first argument
 declare -r subserver="$1"
+# The full command name, including the subserver argument
+declare -r fullname="${myname} ${subserver}"
+# Shift arguments to avoid problems
 shift
 
 # General rule for the variable-naming-schema:
@@ -16,7 +19,6 @@ shift
 [[ -n "${MAIN_ROOT}" ]] && declare -r MAIN_ROOT=${MAIN_ROOT}          || MAIN_ROOT="/srv/${game}"
 [[ -n "${GAME_USER}" ]]    && declare -r GAME_USER=${GAME_USER}       || GAME_USER="${game}"
 source /etc/conf.d/"${game}" 2>/dev/null || >&2 echo "Could not source /etc/conf.d/${game}"
-echo "${MAIN_ROOT}"
 
 [[ -n "${SERVER_ROOT}" ]]  && declare -r SERVER_ROOT=${SERVER_ROOT}   || SERVER_ROOT="${MAIN_ROOT}/servers/${subserver}"
 [[ -n "${BACKUP_DEST}" ]]  && declare -r BACKUP_DEST=${BACKUP_DEST}   || BACKUP_DEST="${MAIN_ROOT}/servers/${subserver}/backup"
@@ -138,7 +140,7 @@ idle_server_daemon() {
 				no_player=$(( no_player + CHECK_PLAYER_TIME ))
 				# Stop the game server if no player was active for at least ${IDLE_IF_TIME}
 				if [[ "${no_player}" -ge "${IDLE_IF_TIME}" ]]; then
-					IDLE_SERVER="false" ${myname} ${subserver} stop
+					IDLE_SERVER="false" ${fullname} stop
 					# Wait for game server to go down
 					for i in {1..100}; do
 						screen -S "${SESSION_NAME}" -Q select . > /dev/null || break
@@ -148,9 +150,18 @@ idle_server_daemon() {
 					# Reset timer and give the player 300 seconds to connect after pinging
 					no_player=$(( IDLE_IF_TIME - 300 ))
 					# Game server is down, listen on port ${GAME_PORT} for incoming connections
-					echo -n "Netcat: "
-					${NETCAT_CMD} -v -l -p ${GAME_PORT} && echo "Netcat caught an connection. The server is coming up again..."
-					IDLE_SERVER="false" ${myname} ${subserver} start
+                                        ${myname} proxy command alert "&eSuspendendo servidor &b${subserver}&e..."
+                                        name=$(${NETCAT_CMD} -i 1 -l -p ${GAME_PORT} | cut -d '' -f6 | xargs | tr -dc '[:alnum:]\n\r')
+                                        if [[ -n $name ]]; then
+                                          ${myname} proxy command alert "&eIniciando servidor &b$subserver&e, a pedido de &b$name&e..."
+                                          IDLE_SERVER="false" ${fullname} start
+                                          sleep 20
+                                          ${myname} proxy command send $name $subserver
+                                          echo "$name" >> ~/log
+                                        else
+                                          ${myname} proxy command alert "&eIniciando servidor &b$subserver&e..."
+                                          IDLE_SERVER="false" ${fullname} start
+                                        fi
 				fi
 			else
 				# Reset timer since there is an active player on the server
@@ -160,9 +171,19 @@ idle_server_daemon() {
 			# Reset timer and give the player 300 seconds to connect after pinging
 			no_player=$(( IDLE_IF_TIME - 300 ))
 			# Game server is down, listen on port ${GAME_PORT} for incoming connections
-			echo -n "Netcat: "
-			${NETCAT_CMD} -v -l -p ${GAME_PORT} && echo "Netcat caught an connection. The server is coming up again..."
-			IDLE_SERVER="false" ${myname} ${subserver} start
+                        ${myname} proxy command alert "&eSuspendendo servidor &b${subserver}&e..."
+                        name=$(${NETCAT_CMD} -i 1 -l -p ${GAME_PORT} | cut -d '' -f6 | xargs | tr -dc '[:alnum:]\n\r')
+                        if [[ -n $name ]]; then
+                          ${myname} proxy command alert "&eIniciando servidor &b$subserver&e, a pedido de &b$name&e..."
+                          IDLE_SERVER="false" ${fullname} start
+                          sleep 20
+                          ${myname} proxy command send $name $subserver
+                          echo "$name" >> ~/log
+                         else
+                          ${myname} proxy command alert "&eIniciando servidor &b$subserver&e..."                       
+                          IDLE_SERVER="false" ${fullname} start
+                        fi
+
 		fi
 	done
 }
@@ -192,7 +213,7 @@ server_start() {
 			# Restart as soon as the idle_server_daemon has shut down completely
 			for i in {1..100}; do
 				if ! ${SUDO_CMD} screen -S "${IDLE_SESSION_NAME}" -Q select . > /dev/null; then
-					${SUDO_CMD} screen -dmS "${IDLE_SESSION_NAME}" /bin/bash -c "${myname} ${subserver} idle_server_daemon"
+					${SUDO_CMD} screen -dmS "${IDLE_SESSION_NAME}" /bin/bash -c "${fullname} idle_server_daemon"
 					break
 				fi
 				[[ $i -eq 100 ]] && echo -e "An \e[39;1merror\e[0m occurred while trying to reset the idle_server!"
@@ -200,7 +221,7 @@ server_start() {
 			done
 		else
 			echo -en "Starting idle server daemon..."
-			${SUDO_CMD} screen -dmS "${IDLE_SESSION_NAME}" /bin/bash -c "${myname} ${subserver} idle_server_daemon"
+			${SUDO_CMD} screen -dmS "${IDLE_SESSION_NAME}" /bin/bash -c "${fullname} idle_server_daemon"
 			echo -e "\e[39;1m done\e[0m"
 		fi
 	fi
@@ -237,11 +258,13 @@ server_stop() {
 		else
 			# Player(s) were seen on the server through list (or an error occurred)
 			# Warning the users through the server console
-			game_command say "Server is going down in 10 seconds! HURRY UP WITH WHATEVER YOU ARE DOING!"
+                        game_command bc "&eO servidor será desligado em &b10&e segundos. Você será movido para o lobby."
 			game_command save-all
-			echo -en "Server is going down in..."
+			echo -en "Servidor desligando em..."
 			for i in {1..10}; do
-				game_command say "down in... $(( 10 - i ))"
+                                if [[ $i -gt 6 ]]; then
+				  game_command bc "&b$(( 10 - i ))"
+                                fi
 				echo -n " $(( 10 - i ))"
 				sleep 1
 			done
@@ -294,6 +317,7 @@ server_status() {
 
 # Restart the complete server by shutting it down and starting it again
 server_restart() {
+        ${myname} proxy command alert "&eReiniciando servidor &b$subserver&e..."
 	if ${SUDO_CMD} screen -S "${SESSION_NAME}" -Q select . > /dev/null; then
 		server_stop
 		server_start
@@ -435,7 +459,7 @@ help() {
 	This script was design to easily control any ${game} server. Quite every parameter for a given
 	${game} server derivative can be altered by editing the variables in the configuration file.
 
-	Usage: ${myname} ${subserver} {start|stop|status|backup|restore|command <command>|console}
+	Usage: ${fullname} {start|stop|status|backup|restore|command <command>|console}
 	    start                Start the ${game} server
 	    stop                 Stop the ${game} server
 	    restart              Restart the ${game} server
