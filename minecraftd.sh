@@ -481,14 +481,14 @@ help() {
 	${game} server derivative can be altered by editing the variables in the configuration file.
 
 	Usage: ${fullname} {start|stop|status|backup|restore|command <command>|console}
-		start				Start the ${game} server
-		stop				 Stop the ${game} server
-		restart			  Restart the ${game} server
-		status			   Print some status information
-		backup			   Backup the world data
-		restore [filename]   Restore the world data from a backup
-		command <command>	Run the given comman at the ${game} server console
-		console			  Enter the server console through a screen session
+	    start                Start the ${game} server
+	    stop                 Stop the ${game} server
+	    restart              Restart the ${game} server
+	    status               Print some status information
+	    backup               Backup the world data
+	    restore [filename]   Restore the world data from a backup
+	    command <command>    Run the given comman at the ${game} server console
+	    console              Enter the server console through a screen session
 
 	Copyright (c) Gordian Edenhofer <gordian.edenhofer@gmail.com>
 	EOF
