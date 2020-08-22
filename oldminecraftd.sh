@@ -1,76 +1,38 @@
 #!/bin/bash
 
 # The actual program name
-declare -r myname="bungeecord"
-declare -r game="bungeecord"
+declare -r myname="minecraftd"
+declare -r game="minecraft"
 
 # General rule for the variable-naming-schema:
 # Variables in capital letters may be passed through the command line others not.
 # Avoid altering any of those later in the code since they may be readonly (IDLE_SERVER is an exception!)
 
 # You may use this script for any game server of your choice, just alter the config file
-# Server settings
-[[ -n "${MAIN_ROOT}" ]]   && declare -r MAIN_ROOT=${MAIN_ROOT}  || MAIN_ROOT="/srv/${game}"
-[[ -n "${GAME_USER}" ]]   && declare -r GAME_USER=${GAME_USER}  || GAME_USER="${game}"
-[[ -n "${PROXY_NAME}" ]] && declare -r PROXY_NAME=${PROXY_NAME} || PROXY_NAME="proxy"
-source /etc/conf.d/"${game}" 2>/dev/null || >&2 echo "Could not source /etc/conf.d/${game}"
-
-# Handling subservers
-# Check how many arguments were given
-case $# in
-	0)
-		# If zero, use the proxy server
-		declare -r subserver="${PROXY_NAME}"
-		;;
-	1)
-		# If one, check wheter it's a command or a subserver
-		possible_commands=("start", "stop", "status", "restart", "console", "command", "backup", "restore", "idle_server_daemon", "-h", "--help")
-		if [[ " ${possible_commands[@]} " =~ " $1 " ]]; then
-			# If a command, use the proxy server
-                        declare -r subserver="${PROXY_NAME}"
-		else
-			# If not, use the argument as subserver
-			declare -r subserver="$1"
-			# And shift the arguments forward
-			shift
-		fi
-		;;
-	*)
-		# If any other (two or more), we can be sure both the subserver and command were specified
-		declare -r subserver="$1"
-		shift
-		;;
-esac
-
-echo "Using subserver: ${subserver}"
-# The full command name, including the subserver
-declare -r fullname="${myname} ${subserver}"
-
-# Subserver settings
-
-[[ -n "${SERVER_ROOT}" ]]     && declare -r SERVER_ROOT=${SERVER_ROOT}         || SERVER_ROOT="${MAIN_ROOT}/servers/${subserver}"
-[[ -n "${BACKUP_DEST}" ]]     && declare -r BACKUP_DEST=${BACKUP_DEST}         || BACKUP_DEST="${MAIN_ROOT}/servers/${subserver}/backup"
-[[ -n "${BACKUP_PATHS}" ]]    && declare -r BACKUP_PATHS=${BACKUP_PATHS}       || BACKUP_PATHS="world"
-[[ -n "${BACKUP_FLAGS}" ]]    && declare -r BACKUP_FLAGS=${BACKUP_FLAGS}       || BACKUP_FLAGS="-z"
-[[ -n "${KEEP_BACKUPS}" ]]    && declare -r KEEP_BACKUPS=${KEEP_BACKUPS}       || KEEP_BACKUPS="10"
-[[ -n "${MAIN_EXECUTABLE}" ]] && declare -r MAIN_EXECUTABLE=${MAIN_EXECUTABLE} || MAIN_EXECUTABLE="server.jar"
-[[ -n "${SESSION_NAME}" ]]    && declare -r SESSION_NAME=${SESSION_NAME}       || SESSION_NAME="${game}_${subserver}"
+[[ -n "${SERVER_ROOT}" ]]  && declare -r SERVER_ROOT=${SERVER_ROOT}   || SERVER_ROOT="/srv/${game}"
+[[ -n "${BACKUP_DEST}" ]]  && declare -r BACKUP_DEST=${BACKUP_DEST}   || BACKUP_DEST="/srv/${game}/backup"
+[[ -n "${BACKUP_PATHS}" ]] && declare -r BACKUP_PATHS=${BACKUP_PATHS} || BACKUP_PATHS="world"
+[[ -n "${BACKUP_FLAGS}" ]] && declare -r BACKUP_FLAGS=${BACKUP_FLAGS} || BACKUP_FLAGS="-z"
+[[ -n "${KEEP_BACKUPS}" ]] && declare -r KEEP_BACKUPS=${KEEP_BACKUPS} || KEEP_BACKUPS="10"
+[[ -n "${GAME_USER}" ]]    && declare -r GAME_USER=${GAME_USER}       || GAME_USER="minecraft"
+[[ -n "${MAIN_EXECUTABLE}" ]] && declare -r MAIN_EXECUTABLE=${MAIN_EXECUTABLE} || MAIN_EXECUTABLE="minecraft_server.jar"
+[[ -n "${SESSION_NAME}" ]] && declare -r SESSION_NAME=${SESSION_NAME} || SESSION_NAME="${game}"
 
 # Command and parameter declaration with which to start the server
 [[ -n "${SERVER_START_CMD}" ]] && declare -r SERVER_START_CMD=${SERVER_START_CMD} || SERVER_START_CMD="java -Xms512M -Xmx1024M -XX:ParallelGCThreads=1 -jar './${MAIN_EXECUTABLE}' nogui"
 
 # System parameters for the control script
-[[ -n "${IDLE_SERVER}" ]]       && tmp_IDLE_SERVER=${IDLE_SERVER}                    || IDLE_SERVER="false"
+[[ -n "${IDLE_SERVER}" ]]       && tmp_IDLE_SERVER=${IDLE_SERVER}   || IDLE_SERVER="false"
 [[ -n "${IDLE_SESSION_NAME}" ]] && declare -r IDLE_SESSION_NAME=${IDLE_SESSION_NAME} || IDLE_SESSION_NAME="idle_server_${SESSION_NAME}"
-[[ -n "${GAME_PORT}" ]]         && declare -r GAME_PORT=${GAME_PORT}                 || GAME_PORT="25565"
+[[ -n "${GAME_PORT}" ]]         && declare -r GAME_PORT=${GAME_PORT}       || GAME_PORT="25565"
 [[ -n "${CHECK_PLAYER_TIME}" ]] && declare -r CHECK_PLAYER_TIME=${CHECK_PLAYER_TIME} || CHECK_PLAYER_TIME="30"
-[[ -n "${IDLE_IF_TIME}" ]]      && declare -r IDLE_IF_TIME=${IDLE_IF_TIME}           || IDLE_IF_TIME="1200"
+[[ -n "${IDLE_IF_TIME}" ]]      && declare -r IDLE_IF_TIME=${IDLE_IF_TIME} || IDLE_IF_TIME="1200"
 
 # Additional configuration options which only few may need to alter
 [[ -n "${GAME_COMMAND_DUMP}" ]] && declare -r GAME_COMMAND_DUMP=${GAME_COMMAND_DUMP} || GAME_COMMAND_DUMP="/tmp/${myname}_${SESSION_NAME}_command_dump.txt"
 
 # Variables passed over the command line will always override the one from a config file
-source "${MAIN_ROOT}"/servers/"${subserver}".conf 2>/dev/null || >&2 echo "Could not source ${MAIN_ROOT}/servers/${subserver}.conf"
+source /etc/conf.d/"${game}" 2>/dev/null || >&2 echo "Could not source /etc/conf.d/${game}"
 
 # Preserve the content of IDLE_SERVER without making it readonly
 [[ -n ${tmp_IDLE_SERVER} ]] && IDLE_SERVER=${tmp_IDLE_SERVER}
@@ -89,8 +51,9 @@ else
 fi
 
 # Choose which flavor of netcat is to be used
-# (Currently only nmap's version works)
-if command -v ncat &> /dev/null; then
+if command -v netcat &> /dev/null; then
+	NETCAT_CMD="netcat"
+elif command -v ncat &> /dev/null; then
 	NETCAT_CMD="ncat"
 else
 	NETCAT_CMD=""
@@ -166,7 +129,7 @@ idle_server_daemon() {
 				no_player=$(( no_player + CHECK_PLAYER_TIME ))
 				# Stop the game server if no player was active for at least ${IDLE_IF_TIME}
 				if [[ "${no_player}" -ge "${IDLE_IF_TIME}" ]]; then
-					IDLE_SERVER="false" ${fullname} stop
+					IDLE_SERVER="false" ${myname} stop
 					# Wait for game server to go down
 					for i in {1..100}; do
 						screen -S "${SESSION_NAME}" -Q select . > /dev/null || break
@@ -176,16 +139,9 @@ idle_server_daemon() {
 					# Reset timer and give the player 300 seconds to connect after pinging
 					no_player=$(( IDLE_IF_TIME - 300 ))
 					# Game server is down, listen on port ${GAME_PORT} for incoming connections
-					${myname} ${PROXY_NAME} command alert "Suspending server ${subserver}"
-					player=$(${NETCAT_CMD} -i 1 -l -p ${GAME_PORT} | cut -d '' -f6 | tr -dc '[:alnum:]')
-					IDLE_SERVER="false" ${fullname} start
-					if [[ -n $name ]]; then
-						${myname} ${PROXY_NAME} command alert "Starting server ${subserver}, as requested by $player"
-						sleep 20
-						${myname} ${PROXY_NAME} command send $player ${subserver}
-					else
-						${myname} ${PROXY_NAME} command alert "Starting server ${subserver}"
-					fi
+					echo -n "Netcat: "
+					${NETCAT_CMD} -v -l -p ${GAME_PORT} && echo "Netcat caught an connection. The server is coming up again..."
+					IDLE_SERVER="false" ${myname} start
 				fi
 			else
 				# Reset timer since there is an active player on the server
@@ -195,16 +151,9 @@ idle_server_daemon() {
 			# Reset timer and give the player 300 seconds to connect after pinging
 			no_player=$(( IDLE_IF_TIME - 300 ))
 			# Game server is down, listen on port ${GAME_PORT} for incoming connections
-			${myname} ${PROXY_NAME} command alert "Suspending server ${subserver}"
-			player=$(${NETCAT_CMD} -i 1 -l -p ${GAME_PORT} | cut -d '' -f6 | tr -dc '[:alnum:]')
-			IDLE_SERVER="false" ${fullname} start
-			if [[ -n $name ]]; then
-				${myname} ${PROXY_NAME} command alert "Starting server ${subserver}, as requested by $player"
-				sleep 20
-				${myname} ${PROXY_NAME} command send $player ${subserver}
-			else
-				${myname} ${PROXY_NAME} command alert "Starting server ${subserver}"
-			fi
+			echo -n "Netcat: "
+			${NETCAT_CMD} -v -l -p ${GAME_PORT} && echo "Netcat caught an connection. The server is coming up again..."
+			IDLE_SERVER="false" ${myname} start
 		fi
 	done
 }
@@ -234,7 +183,7 @@ server_start() {
 			# Restart as soon as the idle_server_daemon has shut down completely
 			for i in {1..100}; do
 				if ! ${SUDO_CMD} screen -S "${IDLE_SESSION_NAME}" -Q select . > /dev/null; then
-					${SUDO_CMD} screen -dmS "${IDLE_SESSION_NAME}" /bin/bash -c "${fullname} idle_server_daemon"
+					${SUDO_CMD} screen -dmS "${IDLE_SESSION_NAME}" /bin/bash -c "${myname} idle_server_daemon"
 					break
 				fi
 				[[ $i -eq 100 ]] && echo -e "An \e[39;1merror\e[0m occurred while trying to reset the idle_server!"
@@ -242,7 +191,7 @@ server_start() {
 			done
 		else
 			echo -en "Starting idle server daemon..."
-			${SUDO_CMD} screen -dmS "${IDLE_SESSION_NAME}" /bin/bash -c "${fullname} idle_server_daemon"
+			${SUDO_CMD} screen -dmS "${IDLE_SESSION_NAME}" /bin/bash -c "${myname} idle_server_daemon"
 			echo -e "\e[39;1m done\e[0m"
 		fi
 	fi
@@ -279,13 +228,11 @@ server_stop() {
 		else
 			# Player(s) were seen on the server through list (or an error occurred)
 			# Warning the users through the server console
-						game_command say "This server is going down in 10 seconds."
+			game_command say "Server is going down in 10 seconds! HURRY UP WITH WHATEVER YOU ARE DOING!"
 			game_command save-all
-			echo -en "Server going down in..."
+			echo -en "Server is going down in..."
 			for i in {1..10}; do
-								if [[ $i -lt ${COUNTDOWN} ]]; then
-				  game_command bc "&b$(( 10 - i ))"
-								fi
+				game_command say "down in... $(( 10 - i ))"
 				echo -n " $(( 10 - i ))"
 				sleep 1
 			done
@@ -338,7 +285,6 @@ server_status() {
 
 # Restart the complete server by shutting it down and starting it again
 server_restart() {
-        ${myname} ${PROXY_NAME} command alert "Restarting server ${subserver}"
 	if ${SUDO_CMD} screen -S "${SESSION_NAME}" -Q select . > /dev/null; then
 		server_stop
 		server_start
@@ -400,7 +346,7 @@ backup_restore() {
 		echo "Please enter the corresponding number for the backup to be restored: "
 		i=1
 		for f in "${BACKUP_DEST}"/[0-9_.]*; do
-			echo -e "	\e[39;1m$i)\e[0m\t$f"
+			echo -e "    \e[39;1m$i)\e[0m\t$f"
 			i=$(( i + 1 ))
 		done
 		echo -en "Restore backup number: "
@@ -480,15 +426,15 @@ help() {
 	This script was design to easily control any ${game} server. Quite every parameter for a given
 	${game} server derivative can be altered by editing the variables in the configuration file.
 
-	Usage: ${fullname} {start|stop|status|backup|restore|command <command>|console}
-		start				Start the ${game} server
-		stop				 Stop the ${game} server
-		restart			  Restart the ${game} server
-		status			   Print some status information
-		backup			   Backup the world data
-		restore [filename]   Restore the world data from a backup
-		command <command>	Run the given comman at the ${game} server console
-		console			  Enter the server console through a screen session
+	Usage: ${myname} {start|stop|status|backup|restore|command <command>|console}
+	    start                Start the ${game} server
+	    stop                 Stop the ${game} server
+	    restart              Restart the ${game} server
+	    status               Print some status information
+	    backup               Backup the world data
+	    restore [filename]   Restore the world data from a backup
+	    command <command>    Run the given comman at the ${game} server console
+	    console              Enter the server console through a screen session
 
 	Copyright (c) Gordian Edenhofer <gordian.edenhofer@gmail.com>
 	EOF
@@ -544,3 +490,4 @@ case "${1:-}" in
 esac
 
 exit 0
+
